@@ -12,6 +12,7 @@
 #   ./build-libvlc.sh              # Build for iOS device + simulator
 #   ./build-libvlc.sh --all        # Build for iOS, tvOS, visionOS, macOS, Catalyst
 #   ./build-libvlc.sh --ios-only   # iOS device + simulator only
+#   ./build-libvlc.sh --ios-device-only # iPhone/iPad diagnostic slice only
 #   ./build-libvlc.sh --macos-only # macOS only (fastest for dev)
 #   ./build-libvlc.sh --catalyst   # Add Mac Catalyst (arm64 + x86_64)
 #   ./build-libvlc.sh --clean      # Remove build directory
@@ -96,6 +97,7 @@ PATCHES_DIR="${REPO_ROOT}/scripts/patches"
 # filename, so nothing here needs to know it.
 
 BUILD_IOS=yes
+BUILD_IOS_SIMULATOR=yes
 BUILD_TVOS=no
 BUILD_VISIONOS=no
 BUILD_MACOS=no
@@ -600,7 +602,10 @@ check_disk_space() {
     # including both simulator architectures, so an `--all` preflight reflects
     # the peak working set instead of the number of final XCFramework slices.
     local build_count=0
-    if [ "$BUILD_IOS" = yes ]; then build_count=$((build_count + 3)); fi
+    if [ "$BUILD_IOS" = yes ]; then
+        build_count=$((build_count + 1))
+        if [ "$BUILD_IOS_SIMULATOR" = yes ]; then build_count=$((build_count + 2)); fi
+    fi
     if [ "$BUILD_TVOS" = yes ]; then build_count=$((build_count + 3)); fi
     if [ "$BUILD_VISIONOS" = yes ]; then build_count=$((build_count + 3)); fi
     if [ "$BUILD_MACOS" = yes ]; then build_count=$((build_count + 2)); fi
@@ -673,13 +678,23 @@ done
 for arg in "$@"; do
     case $arg in
         --all)
+            BUILD_IOS_SIMULATOR=yes
             BUILD_IOS=yes
             BUILD_TVOS=yes
             BUILD_VISIONOS=yes
             BUILD_MACOS=yes
             BUILD_CATALYST=yes
             ;;
+        --ios-device-only)
+            BUILD_IOS=yes
+            BUILD_IOS_SIMULATOR=no
+            BUILD_TVOS=no
+            BUILD_VISIONOS=no
+            BUILD_MACOS=no
+            BUILD_CATALYST=no
+            ;;
         --ios-only)
+            BUILD_IOS_SIMULATOR=yes
             BUILD_IOS=yes
             BUILD_TVOS=no
             BUILD_VISIONOS=no
@@ -764,6 +779,7 @@ Usage: $0 [OPTIONS]
 Platform selection:
   --all              Build for iOS, tvOS, visionOS, macOS, and Mac Catalyst
   --ios-only         iOS device + simulator only (default)
+  --ios-device-only  iPhone/iPad device only (diagnostic build, no simulator)
   --macos-only       macOS only (fastest for development)
   --tvos-only        tvOS device + simulator only
   --visionos-only    visionOS device + simulator only
@@ -2287,24 +2303,28 @@ if [ "$BUILD_IOS" = "yes" ]; then
     # iOS device (arm64)
     compile_libvlc aarch64 iphoneos
 
-    # iOS simulator (arm64 + x86_64)
-    compile_libvlc aarch64 iphonesimulator
-    compile_libvlc x86_64 iphonesimulator
+    if [ "$BUILD_IOS_SIMULATOR" = "yes" ]; then
+        # iOS simulator (arm64 + x86_64)
+        compile_libvlc aarch64 iphonesimulator
+        compile_libvlc x86_64 iphonesimulator
 
-    # Create fat library for simulator
-    info "Creating fat library for iOS simulator..."
-    mkdir -p "${BUILD_DIR}/libs/ios-simulator"
-    lipo \
-        "${VLC_SRC}/build-iphonesimulator-arm64/static-lib/libvlc-full-static.a" \
-        "${VLC_SRC}/build-iphonesimulator-x86_64/static-lib/libvlc-full-static.a" \
-        -create -output "${BUILD_DIR}/libs/ios-simulator/libvlc.a"
+        # Create fat library for simulator
+        info "Creating fat library for iOS simulator..."
+        mkdir -p "${BUILD_DIR}/libs/ios-simulator"
+        lipo \
+            "${VLC_SRC}/build-iphonesimulator-arm64/static-lib/libvlc-full-static.a" \
+            "${VLC_SRC}/build-iphonesimulator-x86_64/static-lib/libvlc-full-static.a" \
+            -create -output "${BUILD_DIR}/libs/ios-simulator/libvlc.a"
+    fi
 
     mkdir -p "${BUILD_DIR}/libs/ios-device"
     cp "${VLC_SRC}/build-iphoneos-arm64/static-lib/libvlc-full-static.a" \
        "${BUILD_DIR}/libs/ios-device/libvlc.a"
 
     XCFRAMEWORK_ARGS+=(-library "${NATIVE_BUILD_DIRECTORY}/libs/ios-device/libvlc.a" -headers "${REPO_ROOT}/Sources/CLibVLC/include")
-    XCFRAMEWORK_ARGS+=(-library "${NATIVE_BUILD_DIRECTORY}/libs/ios-simulator/libvlc.a" -headers "${REPO_ROOT}/Sources/CLibVLC/include")
+    if [ "$BUILD_IOS_SIMULATOR" = "yes" ]; then
+        XCFRAMEWORK_ARGS+=(-library "${NATIVE_BUILD_DIRECTORY}/libs/ios-simulator/libvlc.a" -headers "${REPO_ROOT}/Sources/CLibVLC/include")
+    fi
 fi
 
 if [ "$BUILD_TVOS" = "yes" ]; then

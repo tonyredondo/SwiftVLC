@@ -1,0 +1,128 @@
+diff --git a/src/video_output/vout_subpictures.c b/src/video_output/vout_subpictures.c
+--- a/src/video_output/vout_subpictures.c
++++ b/src/video_output/vout_subpictures.c
+@@ -59,6 +59,9 @@
+     vlc_tick_t start; /* current entry rendering time, */
+     vlc_tick_t stop;  /* set to subpicture at rendering time */
+     bool is_late;
++    /* Diagnostic state only; never participates in subtitle selection. */
++    int timing_state;
++    vlc_tick_t timing_last_log;
+     enum vlc_vout_order channel_order;
+ } spu_render_entry_t;
+ 
+@@ -173,6 +176,7 @@
+     struct swiftvlc_subtitle_text_registration *subtitle_text_registration;
+     uint64_t subtitle_text_attachment_generation;
+     spu_subtitle_text_snapshot subtitle_text_snapshot;
++    bool subtitle_timing_enabled;
+ };
+ 
+ static bool
+@@ -572,14 +576,53 @@
+         .orgstop = orgstop,
+         .start = subpic->i_start,
+         .stop = subpic->i_stop,
++        .timing_state = -1,
++        .timing_last_log = VLC_TICK_INVALID,
+     };
+     return vlc_vector_push(&channel->entries, entry) ? VLC_SUCCESS : VLC_EGENERIC;
+ }
+ 
++/* Opt-in numeric timing probe. No region text, paths, or addresses are read.
++ * Caller holds sys->lock. Event 0=queued, 1=waiting, 2=selected,
++ * 3=rejected, 4=removed, 5=expired-on-arrival. All ticks are microseconds.
++ * Per-entry state transitions are immediate; steady states are sampled at 1Hz.
++ * This does not intercept rendering or modify any playback/clock value. */
++static void
++spu_TraceSubtitleTiming(spu_private_t *sys, struct spu_channel *channel,
++                        spu_render_entry_t *entry, int event,
++                        vlc_tick_t now, vlc_tick_t render, vlc_tick_t boundary)
++{
++    if (!sys->subtitle_timing_enabled || !entry->subpic->b_subtitle)
++        return;
++    if (entry->timing_state == event && now >= entry->timing_last_log &&
++        now - entry->timing_last_log < VLC_TICK_FROM_SEC(1))
++        return;
++    entry->timing_state = event;
++    entry->timing_last_log = now;
++    const subpicture_t *pic = entry->subpic;
++    unsigned flags = (pic->b_ephemer ? 1u : 0u) |
++                     (entry->is_late ? 2u : 0u) |
++                     (channel && channel->clock ? 4u : 0u);
++    msg_Info(&sys->spu, "SWIFTVLC_SPU_V1 event=%d channel=%" PRId64
++             " order=%" PRId64 " now=%" PRId64 " render=%" PRId64
++             " org_start=%" PRId64 " org_stop=%" PRId64
++             " start=%" PRId64 " stop=%" PRId64
++             " pic_start=%" PRId64 " pic_stop=%" PRId64
++             " boundary=%" PRId64 " rate_ppm=%" PRId64
++             " delay=%" PRId64 " flags=%u",
++             event, (int64_t) pic->i_channel, pic->i_order, now, render,
++             entry->orgstart, entry->orgstop, entry->start, entry->stop,
++             pic->i_start, pic->i_stop, boundary,
++             channel ? (int64_t) (channel->rate * 1000000.) : 0,
++             channel ? channel->delay : 0, flags);
++}
++
+ static void spu_Channel_CleanEntry(spu_private_t *sys, spu_render_entry_t *entry)
+ {
+     assert(entry->subpic);
+ 
++    spu_TraceSubtitleTiming(sys, NULL, entry, 4, vlc_tick_now(),
++                             VLC_TICK_INVALID, VLC_TICK_INVALID);
+     spu_PrerenderCancel(sys, entry->subpic);
+     subpicture_Delete(entry->subpic);
+ }
+@@ -1298,6 +1341,8 @@
+             if (!spu_render_entry_IsSelected(render_entry, channel->id,
+                                              render_date, ignore_osd))
+             {
++                spu_TraceSubtitleTiming(sys, channel, render_entry, 1,
++                                         system_now, render_date, VLC_TICK_INVALID);
+                 index++;
+                 continue;
+             }
+@@ -1315,6 +1360,9 @@
+                     is_rejected = true;
+             }
+ 
++            spu_TraceSubtitleTiming(sys, channel, render_entry,
++                                     is_rejected ? 3 : 2,
++                                     system_now, render_date, stop_date);
+             if (is_rejected)
+             {
+                 spu_Channel_CleanEntry(sys, render_entry);
+@@ -2340,6 +2388,10 @@
+         vlc_vector_push(&sys->channels, channel);
+     }
+ 
++    /* Read once at creation; the diagnostic defaults to completely silent. */
++    const char *timing_option = getenv("TONYFLIX_NATIVE_SUBTITLE_TIMING");
++    sys->subtitle_timing_enabled = timing_option && strcmp(timing_option, "1") == 0;
++
+     /* Initialize private fields */
+     vlc_mutex_init(&sys->lock);
+ 
+@@ -2610,6 +2662,12 @@
+         /* Maybe the new one is also already expired */
+         if(spu_HasAlreadyExpired(subpic->i_start, subpic->i_stop, system_now))
+         {
++            spu_render_entry_t expired = { .subpic = subpic,
++                .orgstart = orgstart, .orgstop = orgstop,
++                .start = subpic->i_start, .stop = subpic->i_stop,
++                .timing_state = -1, .timing_last_log = VLC_TICK_INVALID };
++            spu_TraceSubtitleTiming(sys, channel, &expired, 5,
++                                     system_now, VLC_TICK_INVALID, VLC_TICK_INVALID);
+             vlc_mutex_unlock(&sys->lock);
+             subpicture_Delete(subpic);
+             return;
+@@ -2628,6 +2686,9 @@
+         subpicture_Delete(subpic);
+         return;
+     }
++    spu_render_entry_t *queued = &channel->entries.data[channel->entries.size - 1];
++    spu_TraceSubtitleTiming(sys, channel, queued, 0, vlc_tick_now(),
++                             VLC_TICK_INVALID, VLC_TICK_INVALID);
+     spu_PrerenderEnqueue(sys, subpic);
+     vlc_mutex_unlock(&sys->lock);
+ }
