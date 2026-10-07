@@ -2068,13 +2068,14 @@ expected_manifest_tail = [
     "c32b25c893fc15bb105739cb1439a4af253c7394017c20ad81d8b6e3ff77675b  0052-videotoolbox-h264-seek-recovery.patch",
     "87d4c49db84f6fb85423b324d09b1de17387082fce30137f369b6f2c11adf5f8  0053-paused-seek-clock-origin.patch",
     "45edc2bbbf5d1680a416feb132d86b55ef455917d87c6271d0cb9d5c158e8f00  0054-resume-blocked-video-output.patch",
+    "be79772784441a24b21197c6a436c4e086d503df4ff309140fb1d3d1bd2fb86d  0056-subtitle-clock-conversion-context.patch",
 ]
 if manifest_lines[-len(expected_manifest_tail):] != expected_manifest_tail:
     sys.exit(
         "patch manifest must end with frozen 0037 through 0040, native PiP "
         "output identity 0041, adaptive ES recycling 0042, then text-subtitle "
         "callback 0043, deferred-resume correction 0044, playlist policy 0045, "
-        "failure recovery 0046, LGPL2 live555 0047/0048, paused-seek clock 0049, seek video output 0050, subtitle demand 0051, H264 recovery 0052, clock origin 0053, and resume ordering 0054: "
+        "failure recovery 0046, LGPL2 live555 0047/0048, paused-seek clock 0049, seek video output 0050, subtitle demand 0051, H264 recovery 0052, clock origin 0053, resume ordering 0054, and coherent subtitle clock conversion 0056: "
         f"got {manifest_lines[-len(expected_manifest_tail):]}"
     )
 
@@ -2104,6 +2105,7 @@ required_validator_assets = (
     "scripts/patches/validation/seek-video-output-source-check.py",
     "scripts/patches/validation/strict-frame-step-probe.c",
     "scripts/patches/validation/strict-frame-step-source-check.py",
+    "scripts/patches/validation/subtitle-clock-context.py",
     "scripts/patches/validation/subtitle-text-snapshot.c",
     "scripts/patches/validation/test_pip_extension_version.py",
     "scripts/patches/validation/vmem-configuration-race.c",
@@ -2171,6 +2173,10 @@ if verifier_executable_asset_paths != required_executable_validator_assets:
         "native validator executable-mode inventory drifted: "
         f"{verifier_executable_asset_paths}"
     )
+
+subtitle_clock_validator = "scripts/patches/validation/subtitle-clock-context.py"
+if subtitle_clock_validator not in build or "patches/validation/subtitle-clock-context.py" not in native_patch_series_validator:
+    sys.exit("coherent subtitle clock regression must run in both native build and source replay")
 
 assembly_manifest_detection = build.index(
     'if [ "$manifest_entry" = "0038-apple-assembly-metadata.patch" ]; then'
