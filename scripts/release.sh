@@ -25,7 +25,7 @@ if [[ "${SWIFTVLC_RELEASE_SUPERVISED:-}" != "1" ]]; then
   exec python3 -B "$(dirname "$0")/release-runner.py" "$0" "$@"
 fi
 
-REPO="harflabs/SwiftVLC"
+REPO="tonyredondo/SwiftVLC"
 XCFW_PATH="Vendor/libvlc.xcframework"
 SHOWCASE_PROJECT="Showcase/SwiftVLCShowcase.xcodeproj/project.pbxproj"
 ZIP_NAME="libvlc.xcframework.zip"
@@ -294,7 +294,7 @@ with open(path, "r") as f:
 remote_block = f"""/* Begin XCRemoteSwiftPackageReference section */
 \t\tBA000001 /* XCRemoteSwiftPackageReference \"SwiftVLC\" */ = {{
 \t\t\tisa = XCRemoteSwiftPackageReference;
-\t\t\trepositoryURL = \"https://github.com/harflabs/SwiftVLC\";
+\t\t\trepositoryURL = \"https://github.com/tonyredondo/SwiftVLC\";
 \t\t\trequirement = {{
 \t\t\t\tkind = exactVersion;
 \t\t\t\tversion = {version};
@@ -315,7 +315,7 @@ remote_pattern = re.compile(
     r'/\* Begin XCRemoteSwiftPackageReference section \*/\n'
     r'\t\tBA000001 /\* XCRemoteSwiftPackageReference "SwiftVLC" \*/ = \{\n'
     r'\t\t\tisa = XCRemoteSwiftPackageReference;\n'
-    r'\t\t\trepositoryURL = "https://github.com/harflabs/SwiftVLC";\n'
+    r'\t\t\trepositoryURL = "https://github.com/(?:harflabs|tonyredondo)/SwiftVLC";\n'
     r'\t\t\trequirement = \{\n'
     r'\t\t\t\tkind = (?:upToNextMajorVersion|exactVersion);\n'
     # Pre-release identifiers carry letters and hyphens: 1.1.0-beta.1.
@@ -381,7 +381,7 @@ remote = re.compile(
     r'/\* Begin XCRemoteSwiftPackageReference section \*/\n'
     r'\t\tBA000001 /\* XCRemoteSwiftPackageReference "SwiftVLC" \*/ = \{\n'
     r'\t\t\tisa = XCRemoteSwiftPackageReference;\n'
-    r'\t\t\trepositoryURL = "https://github.com/harflabs/SwiftVLC";\n'
+    r'\t\t\trepositoryURL = "https://github.com/(?:harflabs|tonyredondo)/SwiftVLC";\n'
     r'\t\t\trequirement = \{\n'
     r'\t\t\t\tkind = (?:upToNextMajorVersion|exactVersion);\n'
     r'\t\t\t\t(?:minimumVersion|version) = [0-9][0-9A-Za-z.\-]*;\n'

@@ -49,9 +49,11 @@ def normalized_package_manifest(payload: bytes) -> bytes:
         text = payload.decode()
     except UnicodeDecodeError:
         fail("Package.swift is not UTF-8")
+    # Allow the original owner only for canonical source-identity migration.
+    # Download resolution independently accepts only our personal fork.
     release_pattern = re.compile(
         r'\.binaryTarget\(\s*name:\s*"libvlc",\s*'
-        r'url:\s*"https://github\.com/harflabs/SwiftVLC/releases/download/'
+        r'url:\s*"https://github\.com/(?:harflabs|tonyredondo)/SwiftVLC/releases/download/'
         r'v[^"/]+/libvlc\.xcframework\.zip",\s*'
         r'checksum:\s*"[0-9a-f]{64}"\s*\)',
         re.DOTALL,
@@ -78,7 +80,7 @@ def normalized_showcase_project(payload: bytes) -> bytes:
         r'/\* Begin XCRemoteSwiftPackageReference section \*/\n'
         r'\t\tBA000001 /\* XCRemoteSwiftPackageReference "SwiftVLC" \*/ = \{\n'
         r'\t\t\tisa = XCRemoteSwiftPackageReference;\n'
-        r'\t\t\trepositoryURL = "https://github\.com/harflabs/SwiftVLC";\n'
+        r'\t\t\trepositoryURL = "https://github\.com/(?:harflabs|tonyredondo)/SwiftVLC";\n'
         r'\t\t\trequirement = \{\n'
         r'\t\t\t\tkind = (?:upToNextMajorVersion|exactVersion);\n'
         r'\t\t\t\t(?:minimumVersion|version) = [0-9][0-9A-Za-z.\-]*;\n'

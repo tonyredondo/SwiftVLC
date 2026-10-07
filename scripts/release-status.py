@@ -47,7 +47,7 @@ def inspect(root, version, candidate=None):
                 blockers.append("Candidate version does not match the requested release.")
         except (OSError, ValueError):
             blockers.append("Candidate manifest is missing or invalid.")
-    pull = command("gh", "pr", "list", "--repo", "harflabs/SwiftVLC", "--head",
+    pull = command("gh", "pr", "list", "--repo", "tonyredondo/SwiftVLC", "--head",
                    f"release-candidates/v{version}", "--state", "all", "--json",
                    "number,state,url,headRefOid,statusCheckRollup")
     if pull is not None:

@@ -63,7 +63,7 @@ class CandidateBuildBindingTests(unittest.TestCase):
             """/* Begin XCRemoteSwiftPackageReference section */
 \t\tBA000001 /* XCRemoteSwiftPackageReference "SwiftVLC" */ = {
 \t\t\tisa = XCRemoteSwiftPackageReference;
-\t\t\trepositoryURL = "https://github.com/harflabs/SwiftVLC";
+\t\t\trepositoryURL = "https://github.com/tonyredondo/SwiftVLC";
 \t\t\trequirement = {
 \t\t\t\tkind = exactVersion;
 \t\t\t\tversion = 1.1.0-beta.8;
@@ -192,7 +192,7 @@ PRODUCT_BUNDLE_IDENTIFIER = com.swiftvlc.showcase.ios.uitests;
         return {
             "identity": "swiftvlc",
             "kind": "remoteSourceControl",
-            "location": "https://github.com/harflabs/SwiftVLC",
+            "location": "https://github.com/tonyredondo/SwiftVLC",
             "name": "SwiftVLC",
         }
 
@@ -224,7 +224,7 @@ PRODUCT_BUNDLE_IDENTIFIER = com.swiftvlc.showcase.ios.uitests;
             "source": {
                 "type": "remote",
                 "url": (
-                    "https://github.com/harflabs/SwiftVLC/releases/download/"
+                    "https://github.com/tonyredondo/SwiftVLC/releases/download/"
                     "1.1.0-beta.8/libvlc.xcframework.zip"
                 ),
             },

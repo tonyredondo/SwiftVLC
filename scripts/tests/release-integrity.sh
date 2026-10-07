@@ -547,7 +547,7 @@ cat > "$temp_dir/Package.swift" <<EOF
 let package = Package(targets: [
   .binaryTarget(
     name: "libvlc",
-    url: "https://github.com/harflabs/SwiftVLC/releases/download/v1.1.0-beta.1/libvlc.xcframework.zip",
+    url: "https://github.com/tonyredondo/SwiftVLC/releases/download/v1.1.0-beta.1/libvlc.xcframework.zip",
     checksum: "$checksum"
   )
 ])
@@ -626,7 +626,7 @@ print(
     json.dumps(
         {
             "url": (
-                "https://github.com/harflabs/SwiftVLC/releases/"
+                "https://github.com/tonyredondo/SwiftVLC/releases/"
                 f"tag/{release_locator}"
             ),
             "tagName": tag,
@@ -639,7 +639,7 @@ print(
                     "name": "libvlc.xcframework.zip",
                     "digest": f"sha256:{digest}",
                     "url": (
-                        "https://github.com/harflabs/SwiftVLC/releases/"
+                        "https://github.com/tonyredondo/SwiftVLC/releases/"
                         f"download/{asset_locator}/libvlc.xcframework.zip"
                     ),
                     "size": 1,
@@ -675,7 +675,7 @@ print(
     json.dumps(
         {
             "html_url": (
-                "https://github.com/harflabs/SwiftVLC/releases/"
+                "https://github.com/tonyredondo/SwiftVLC/releases/"
                 f"tag/{tag}"
             ),
             "tag_name": tag,
@@ -688,7 +688,7 @@ print(
                     "name": "libvlc.xcframework.zip",
                     "digest": f"sha256:{checksum}",
                     "browser_download_url": (
-                        "https://github.com/harflabs/SwiftVLC/releases/"
+                        "https://github.com/tonyredondo/SwiftVLC/releases/"
                         f"download/{tag}/libvlc.xcframework.zip"
                     ),
                     "size": 1,
@@ -752,7 +752,7 @@ fi
 resolver_ci_env=(
   "GITHUB_ACTIONS=true"
   "GITHUB_EVENT_NAME=push"
-  "GITHUB_REPOSITORY=harflabs/SwiftVLC"
+  "GITHUB_REPOSITORY=tonyredondo/SwiftVLC"
   "GITHUB_REF=refs/heads/release-candidates/v1.1.0-beta.1"
   "GITHUB_SHA=$resolver_commit"
   "GITHUB_HEAD_REF="
@@ -886,17 +886,17 @@ import sys
 
 valid_path, fork_path, wrong_head_path, wrong_base_path, commit = sys.argv[1:]
 valid = {
-    "repository": {"full_name": "harflabs/SwiftVLC"},
+    "repository": {"full_name": "tonyredondo/SwiftVLC"},
     "pull_request": {
         "number": 17,
         "head": {
             "ref": "release-candidates/v1.1.0-beta.1",
             "sha": commit,
-            "repo": {"full_name": "harflabs/SwiftVLC"},
+            "repo": {"full_name": "tonyredondo/SwiftVLC"},
         },
         "base": {
             "ref": "main",
-            "repo": {"full_name": "harflabs/SwiftVLC"},
+            "repo": {"full_name": "tonyredondo/SwiftVLC"},
         },
     },
 }
@@ -922,7 +922,7 @@ PY
 resolver_pr_env=(
   "GITHUB_ACTIONS=true"
   "GITHUB_EVENT_NAME=pull_request"
-  "GITHUB_REPOSITORY=harflabs/SwiftVLC"
+  "GITHUB_REPOSITORY=tonyredondo/SwiftVLC"
   "GITHUB_REF=refs/pull/17/merge"
   "GITHUB_SHA=$resolver_merge_commit"
   "GITHUB_HEAD_REF=release-candidates/v1.1.0-beta.1"
@@ -4524,7 +4524,7 @@ if [ "${1:-}" = build ]; then
     shift
   done
   [ -n "$package_path" ]
-  grep -Fq '.package(url: "https://github.com/harflabs/SwiftVLC.git", exact: "1.1.0")' \
+  grep -Fq '.package(url: "https://github.com/tonyredondo/SwiftVLC.git", exact: "1.1.0")' \
     "$package_path/Package.swift"
   grep -Fq 'import SwiftVLC' "$package_path/Sources/SwiftVLCSmoke/main.swift"
   exit 0
@@ -4630,17 +4630,17 @@ perform_merge() {
 
 if [ "${1:-}" = api ]; then
   case " $* " in
-    *" repos/harflabs/SwiftVLC "*)
+    *" repos/tonyredondo/SwiftVLC "*)
       if [ "${SWIFTVLC_RELEASE_TEST_RULESET_DRIFT:-}" = repository-merge ]; then
         allow_merge=false
       else
         allow_merge=true
       fi
-      printf '{"full_name":"harflabs/SwiftVLC","default_branch":"main","archived":false,"disabled":false,"allow_merge_commit":%s}\n' \
+      printf '{"full_name":"tonyredondo/SwiftVLC","default_branch":"main","archived":false,"disabled":false,"allow_merge_commit":%s}\n' \
         "$allow_merge"
       exit 0
       ;;
-    *" repos/harflabs/SwiftVLC/pulls/17/merge "*)
+    *" repos/tonyredondo/SwiftVLC/pulls/17/merge "*)
       expected=""
       merge_method=""
       method=""
@@ -4659,11 +4659,11 @@ if [ "${1:-}" = api ]; then
       perform_merge "$expected"
       exit $?
       ;;
-    *" repos/harflabs/SwiftVLC/rulesets?includes_parents=true&per_page=100 "*)
-      printf '%s\n' '[{"id":15683730,"name":"Protect main","target":"branch","source_type":"Repository","source":"harflabs/SwiftVLC","enforcement":"active"}]'
+    *" repos/tonyredondo/SwiftVLC/rulesets?includes_parents=true&per_page=100 "*)
+      printf '%s\n' '[{"id":15683730,"name":"Protect main","target":"branch","source_type":"Repository","source":"tonyredondo/SwiftVLC","enforcement":"active"}]'
       exit 0
       ;;
-    *" repos/harflabs/SwiftVLC/rulesets/15683730 "*)
+    *" repos/tonyredondo/SwiftVLC/rulesets/15683730 "*)
       python3 - "${SWIFTVLC_RELEASE_TEST_RULESET_DRIFT:-}" <<'PY'
 import json
 import sys
@@ -4674,7 +4674,7 @@ policy = {
     "name": "Protect main",
     "target": "branch",
     "source_type": "Repository",
-    "source": "harflabs/SwiftVLC",
+    "source": "tonyredondo/SwiftVLC",
     "enforcement": "active",
     "bypass_actors": [],
     "conditions": {
@@ -4740,12 +4740,12 @@ print(json.dumps(policy))
 PY
       exit 0
       ;;
-    *" repos/harflabs/SwiftVLC/immutable-releases "*)
+    *" repos/tonyredondo/SwiftVLC/immutable-releases "*)
       [ "${SWIFTVLC_RELEASE_TEST_IMMUTABLE_DISABLED:-}" != 1 ] || exit 1
       printf 'true\n'
       exit 0
       ;;
-    *" --method DELETE https://api.github.com/repos/harflabs/SwiftVLC/releases/assets/"*)
+    *" --method DELETE https://api.github.com/repos/tonyredondo/SwiftVLC/releases/assets/"*)
       asset_url=${!#}
       asset_name=${asset_url##*/}
       rm -f "$capture/starters/$asset_name"
@@ -4794,11 +4794,11 @@ for path in sorted((capture / "uploaded").iterdir()):
             "name": path.name,
             "digest": f"sha256:{digest}",
             "url": (
-                "https://github.com/harflabs/SwiftVLC/releases/download/"
+                "https://github.com/tonyredondo/SwiftVLC/releases/download/"
                 f"{asset_locator}/{path.name}"
             ),
             "apiUrl": (
-                "https://api.github.com/repos/harflabs/SwiftVLC/"
+                "https://api.github.com/repos/tonyredondo/SwiftVLC/"
                 f"releases/assets/{path.name}"
             ),
             "state": "uploaded",
@@ -4811,11 +4811,11 @@ for path in sorted((capture / "starters").iterdir()):
             "name": path.name,
             "digest": None,
             "url": (
-                "https://github.com/harflabs/SwiftVLC/releases/download/"
+                "https://github.com/tonyredondo/SwiftVLC/releases/download/"
                 f"{asset_locator}/{path.name}"
             ),
             "apiUrl": (
-                "https://api.github.com/repos/harflabs/SwiftVLC/"
+                "https://api.github.com/repos/tonyredondo/SwiftVLC/"
                 f"releases/assets/{path.name}"
             ),
             "state": "starter",
@@ -4826,7 +4826,7 @@ print(
     json.dumps(
         {
             "url": (
-                "https://github.com/harflabs/SwiftVLC/releases/"
+                "https://github.com/tonyredondo/SwiftVLC/releases/"
                 f"tag/{release_locator}"
             ),
             "tagName": tag,
@@ -4935,7 +4935,7 @@ if [ "${1:-}" = pr ] && [ "${2:-}" = create ]; then
   /usr/bin/git --git-dir="$origin" \
     rev-parse refs/heads/release-candidates/v1.1.0 > "$pr_head"
   printf 'open\n' > "$pr_state"
-  printf 'https://github.com/harflabs/SwiftVLC/pull/17\n'
+  printf 'https://github.com/tonyredondo/SwiftVLC/pull/17\n'
   exit 0
 fi
 
@@ -4974,7 +4974,7 @@ print(
                 "baseRefOid": base_path.read_text().strip(),
                 "mergedAt": "2026-09-02T00:00:00Z" if state == "merged" else None,
                 "mergeCommit": {"oid": merge} if merge else None,
-                "url": "https://github.com/harflabs/SwiftVLC/pull/17",
+                "url": "https://github.com/tonyredondo/SwiftVLC/pull/17",
             }
         ]
     )
@@ -5924,11 +5924,14 @@ showcase_version=$(sed -n \
 [[ "$actual_tag" == "v$showcase_version" ]] \
   || fail "checkout resolves $actual_tag but Showcase resolves v$showcase_version"
 
-stable_info=$(SWIFTVLC_RELEASE_TAG=v1.0.0 ./scripts/resolve-release-artifact.sh)
-stable_tag=$(printf '%s' "$stable_info" \
+# This fork has no release assets for upstream's historical stable tags.
+# Exercise the explicit-tag live route with this fork's published version;
+# the isolated fixtures above cover selection of different release tags.
+override_info=$(SWIFTVLC_RELEASE_TAG="$actual_tag" ./scripts/resolve-release-artifact.sh)
+override_tag=$(printf '%s' "$override_info" \
   | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag"])')
-[[ "$stable_tag" == "v1.0.0" ]] \
-  || fail "explicit release override resolved $stable_tag instead of v1.0.0"
+[[ "$override_tag" == "$actual_tag" ]] \
+  || fail "explicit release override resolved $override_tag instead of $actual_tag"
 
 if ./scripts/release.sh 1.1.0 >/dev/null 2>&1; then
   fail "stable release was accepted without a prepared candidate"

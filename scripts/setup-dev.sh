@@ -15,7 +15,7 @@
 #
 set -euo pipefail
 
-REPO="harflabs/SwiftVLC"
+REPO="tonyredondo/SwiftVLC"
 XCFW_DIR="Vendor/libvlc.xcframework"
 INSTALL_RECORD="Vendor/.swiftvlc-release.json"
 SHOWCASE_PROJECT="Showcase/SwiftVLCShowcase.xcodeproj/project.pbxproj"
@@ -117,7 +117,7 @@ remote_pattern = re.compile(
     r'/\* Begin XCRemoteSwiftPackageReference section \*/\n'
     r'\t\tBA000001 /\* XCRemoteSwiftPackageReference "SwiftVLC" \*/ = \{\n'
     r'\t\t\tisa = XCRemoteSwiftPackageReference;\n'
-    r'\t\t\trepositoryURL = "https://github.com/harflabs/SwiftVLC";\n'
+    r'\t\t\trepositoryURL = "https://github.com/(?:harflabs|tonyredondo)/SwiftVLC";\n'
     r'\t\t\trequirement = \{\n'
     r'\t\t\t\tkind = (?:upToNextMajorVersion|exactVersion);\n'
     # Pre-release identifiers carry letters and hyphens: 1.1.0-beta.1.

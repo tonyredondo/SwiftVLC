@@ -1,3 +1,16 @@
+> **Tonyflix fork:** this repository is maintained at `tonyredondo/SwiftVLC`.
+> It retains the `v1.1.0-beta.14` Swift surface and the pinned VLC engine,
+> adding coherent subtitle timestamp conversion in native patch `0056`.
+> Release assets and tooling target this personal fork. Tonyflix pins an exact
+> fork release; it does not download a moving `main` branch or an upstream
+> binary. Fork versions use a `-tonyflix.N` prerelease suffix.
+>
+> The original Spanish SRT was verified on a physical iPad in the minimal and
+> complete Tonyflix players, including prolonged playback, pauses and seeks.
+> This is case-specific evidence, not qualification of the complete platform
+> and feature matrix. Fork artifacts remain prereleases until that matrix is
+> independently satisfied. Android uses a different VLC engine and is unchanged.
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/harflabs/SwiftVLC/main/Assets/logo-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/harflabs/SwiftVLC/main/Assets/logo-light.svg">

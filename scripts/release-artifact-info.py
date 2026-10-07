@@ -17,7 +17,7 @@ TARGET_PATTERN = re.compile(
 URL_PATTERN = re.compile(r'\burl:\s*"(?P<url>[^"]+)"')
 CHECKSUM_PATTERN = re.compile(r'\bchecksum:\s*"(?P<checksum>[a-f0-9]{64})"')
 TAG_PATTERN = re.compile(
-    r"^https://github\.com/harflabs/SwiftVLC/releases/download/"
+    r"^https://github\.com/tonyredondo/SwiftVLC/releases/download/"
     r"(?P<tag>v[^/]+)/libvlc\.xcframework\.zip$"
 )
 

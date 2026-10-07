@@ -2,7 +2,7 @@
 # Resolve and verify the exact released libvlc artifact this checkout declares.
 set -euo pipefail
 
-REPO="harflabs/SwiftVLC"
+REPO="tonyredondo/SwiftVLC"
 ASSET_NAME="libvlc.xcframework.zip"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"

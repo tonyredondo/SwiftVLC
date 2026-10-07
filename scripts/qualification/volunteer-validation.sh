@@ -55,7 +55,7 @@ for command in curl defaults git jq python3 shasum swift xcodebuild xcrun; do
 done
 if ! git -C "$ROOT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "Error: this validator must currently be run from a Git clone." >&2
-  echo "Clone https://github.com/harflabs/SwiftVLC, check out the requested tag," >&2
+  echo "Clone https://github.com/tonyredondo/SwiftVLC, check out the requested tag," >&2
   echo "then double-click Validate SwiftVLC.command." >&2
   exit 1
 fi
