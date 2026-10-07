@@ -49,6 +49,7 @@ ASSET_PATHS = (
     "scripts/patches/validation/seek-video-output-source-check.py",
     "scripts/patches/validation/strict-frame-step-probe.c",
     "scripts/patches/validation/strict-frame-step-source-check.py",
+    "scripts/patches/validation/subtitle-clock-context.py",
     "scripts/patches/validation/subtitle-text-snapshot.c",
     "scripts/patches/validation/test_pip_extension_version.py",
     "scripts/patches/validation/vmem-configuration-race.c",
