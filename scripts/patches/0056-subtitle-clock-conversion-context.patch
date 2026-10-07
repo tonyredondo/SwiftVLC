@@ -1,0 +1,134 @@
+diff --git a/src/clock/clock.c b/src/clock/clock.c
+--- a/src/clock/clock.c
++++ b/src/clock/clock.c
+@@ -1218,6 +1218,25 @@
+     return clock->last_conversion;
+ }
+ 
++/* Borrowed under the main clock lock. Unlike scalar conversion, consulting
++ * upcoming subtitle dates must not change the playback conversion reference. */
++struct vlc_clock_context *
++vlc_clock_GetConversionContext(vlc_clock_t *clock, vlc_tick_t system_now,
++                               vlc_tick_t reference_ts)
++{
++    AssertLocked(clock);
++    return vlc_clock_get_context(clock, system_now, reference_ts, false);
++}
++
++vlc_tick_t vlc_clock_ConvertToSystemWithContext(
++    vlc_clock_t *clock, struct vlc_clock_context *context,
++    vlc_tick_t system_now, vlc_tick_t ts, double rate)
++{
++    AssertLocked(clock);
++    assert(context != NULL);
++    return clock->ops->to_system(clock, context, system_now, ts, rate);
++}
++
+ static const struct vlc_clock_ops master_ops = {
+     .update = vlc_clock_master_update,
+     .reset = vlc_clock_master_reset,
+diff --git a/src/clock/clock.h b/src/clock/clock.h
+--- a/src/clock/clock.h
++++ b/src/clock/clock.h
+@@ -357,6 +357,23 @@
+                                      double rate, uint32_t *clock_id);
+ 
+ /**
++ * Borrow the timeline used to convert related subtitle timestamps.
++ *
++ * The main clock lock must remain held until the last conversion. The context
++ * cannot outlive that lock or a clock update/reset. This does not advance the
++ * clock's last-conversion reference; queued future cues are not playback.
++ */
++struct vlc_clock_context;
++struct vlc_clock_context *
++vlc_clock_GetConversionContext(vlc_clock_t *clock, vlc_tick_t system_now,
++                               vlc_tick_t reference_ts);
++
++/** Convert on the borrowed timeline without advancing the clock reference. */
++vlc_tick_t vlc_clock_ConvertToSystemWithContext(
++    vlc_clock_t *clock, struct vlc_clock_context *context,
++    vlc_tick_t system_now, vlc_tick_t ts, double rate);
++
++/**
+  * Starts a new clock based on the given clock point, accounting for
+  * previous updates.
+  *
+diff --git a/src/video_output/vout_subpictures.c b/src/video_output/vout_subpictures.c
+--- a/src/video_output/vout_subpictures.c
++++ b/src/video_output/vout_subpictures.c
+@@ -1197,8 +1197,7 @@
+ static size_t spu_channel_UpdateDates(struct spu_channel *channel,
+                                        vlc_tick_t system_now)
+ {
+-    /* Put every spu start and stop ts into the same array to convert them in
+-     * one shot */
++    /* Convert the queued channel on one coherent clock timeline. */
+     if (channel->entries.size == 0)
+         return 0;
+ 
+@@ -1207,24 +1206,25 @@
+ 
+     vlc_clock_Lock(channel->clock);
+     spu_render_entry_t *entry;
++    vlc_tick_t reference_ts = channel->entries.data[0].orgstart;
+     vlc_vector_foreach_ref(entry, &channel->entries)
+-    {
+-        assert(entry);
+-
+-        entry->start = vlc_clock_ConvertToSystem(channel->clock, system_now,
+-                                                 entry->orgstart, channel->rate,
+-                                                 NULL);
+-
+-        if (entry->orgstop != VLC_TICK_INVALID)
+-        {
+-            entry->stop = vlc_clock_ConvertToSystem(channel->clock,
+-                                                    system_now,
+-                                                    entry->orgstop,
+-                                                    channel->rate,
+-                                                    NULL);
+-        }
+-        else
+-            entry->stop = VLC_TICK_INVALID;
++        if (entry->orgstart < reference_ts)
++            reference_ts = entry->orgstart;
++
++    /* Borrow one timeline for the channel while its clock remains locked.
++     * Only the earliest cue advances the conversion reference. Ends and future
++     * cues are lookahead, and must not make an active cue "too early" again. */
++    struct vlc_clock_context *context =
++        vlc_clock_GetConversionContext(channel->clock, system_now, reference_ts);
++    (void) vlc_clock_ConvertToSystem(channel->clock, system_now, reference_ts,
++                                      channel->rate, NULL);
++    vlc_vector_foreach_ref(entry, &channel->entries)
++    {
++        entry->start = vlc_clock_ConvertToSystemWithContext(channel->clock,
++                          context, system_now, entry->orgstart, channel->rate);
++        entry->stop = entry->orgstop == VLC_TICK_INVALID ? VLC_TICK_INVALID
++            : vlc_clock_ConvertToSystemWithContext(channel->clock, context,
++                          system_now, entry->orgstop, channel->rate);
+     }
+     vlc_clock_Unlock(channel->clock);
+ 
+@@ -2645,15 +2645,13 @@
+         vlc_tick_t system_now = vlc_tick_now();
+ 
+         vlc_clock_Lock(channel->clock);
+-        subpic->i_start =
+-            vlc_clock_ConvertToSystem(channel->clock, system_now,
+-                                      orgstart, channel->rate, NULL);
++        struct vlc_clock_context *context =
++            vlc_clock_GetConversionContext(channel->clock, system_now, orgstart);
++        subpic->i_start = vlc_clock_ConvertToSystemWithContext(channel->clock,
++                            context, system_now, orgstart, channel->rate);
+         if (orgstop != VLC_TICK_INVALID)
+-        {
+-            subpic->i_stop =
+-                vlc_clock_ConvertToSystem(channel->clock, system_now,
+-                                      orgstop, channel->rate, NULL);
+-        }
++            subpic->i_stop = vlc_clock_ConvertToSystemWithContext(channel->clock,
++                                context, system_now, orgstop, channel->rate);
+ 
+         vlc_clock_Unlock(channel->clock);
+ 

@@ -1677,6 +1677,11 @@ else
     info "Selected patch manifest has no SwiftVLC native extension contract."
 fi
 
+if [ -n "$PATCHES_DIR" ] &&
+   [ -f "$PATCHES_DIR/0056-subtitle-clock-conversion-context.patch" ]; then
+    python3 -B "$REPO_ROOT/scripts/patches/validation/subtitle-clock-context.py" "$VLC_SRC"
+fi
+
 # The libvlccore Darwin Objective-C target is compiled under ARC. Run the
 # 0032/0033 structural/mutation/model proof before any architecture build so
 # manual ownership or build-system drift fails in seconds instead of after the

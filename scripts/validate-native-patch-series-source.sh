@@ -272,6 +272,9 @@ section "Validating native playback recovery and playlist policy"
 section "Validating seek video output and paused bootstrap"
 python3 -B "$SCRIPT_DIR/patches/validation/seek-video-output-source-check.py" "$VLC_SOURCE_ROOT"
 
+section "Validating coherent subtitle clock conversion"
+python3 -B "$SCRIPT_DIR/patches/validation/subtitle-clock-context.py" "$VLC_SOURCE_ROOT"
+
 section "Native patch-series source contracts passed"
 echo "Pinned VLC commit: $actual_commit"
 echo "Applied patches:   ${#patch_names[@]}"
