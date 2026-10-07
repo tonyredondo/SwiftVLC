@@ -1,15 +1,31 @@
-"""Execute the pinned clock conversion and SPU call sites with numerical cue522."""
+"""Replay the real pinned clock and SPU conversions with captured cue timing.
+
+The clock math and queue call sites come directly from the native source. Locks
+are stubbed for this single-threaded numerical test; native build and physical
+player qualification provide separate integration evidence.
+"""
+
 from pathlib import Path
-import argparse,re,subprocess,tempfile
-def function(text,name):
- m=re.search(r'\b'+re.escape(name)+r'\([^;]+?\)\s*\{',text);assert m,name
- start=text.rfind('\n\n',0,m.start())+2;i=text.index('{',m.start());depth=1;j=i+1
- while depth:
-  if text[j]=='{':depth+=1
-  elif text[j]=='}':depth-=1
-  j+=1
- return text[start:j]+'\n'
-PRE=r'''
+import argparse, re, subprocess, tempfile
+
+
+def function(text, name):
+    m = re.search(r"\b" + re.escape(name) + r"\([^;]+?\)\s*\{", text)
+    assert m, name
+    start = text.rfind("\n\n", 0, m.start()) + 2
+    i = text.index("{", m.start())
+    depth = 1
+    j = i + 1
+    while depth:
+        if text[j] == "{":
+            depth += 1
+        elif text[j] == "}":
+            depth -= 1
+        j += 1
+    return text[start:j] + "\n"
+
+
+PRE = r"""
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -43,8 +59,8 @@ static void vlc_clock_Unlock(vlc_clock_t *c) { (void)c; }
 typedef struct { int64_t i_channel;vlc_tick_t i_start,i_stop; } subpicture_t;
 typedef struct { subpicture_t *subpic;vlc_tick_t orgstart,orgstop,start,stop; } spu_render_entry_t;
 struct spu_channel { vlc_clock_t *clock;double rate;struct VLC_VECTOR(spu_render_entry_t) entries; };
-'''
-CASES=r'''
+"""
+CASES = r"""
 static void setup(ctx_t *old,ctx_t *current,vlc_clock_main_t *main,vlc_clock_t *clock) {
  *old=(ctx_t){.rate=1,.coeff=1,.offset=750275163950LL,.clock_id=0,.last={.system=1}};
  *current=*old;current->offset=750274415929LL;current->clock_id=1;
@@ -71,6 +87,16 @@ int main(void) {
   assert(future.i_stop-future.i_start==2000000);
  }
  if(queue_changed_reference) {fprintf(stderr,"FAIL future cue advances playback reference\n");return 1;}
+ // A future cue can precede the active cue in the queue. Use the earliest
+ // start, rather than relying on insertion order, to choose the timeline.
+ setup(&old,&current,&main,&clock);
+ spu_render_entry_t reversed[2]={entries[1],entries[0]};
+ channel.entries.data=reversed;
+ assert(spu_channel_UpdateDates(&channel,751678708555LL)==2);
+ assert(spu_render_entry_IsSelected(&reversed[1],3,751678746586LL,false));
+ assert(reversed[1].stop-reversed[1].start==914000);
+ assert(clock.last_conversion==reversed[1].start);
+ channel.entries.data=entries;
  // Delay, rate and scalar conversion keep their existing numerical contract.
  setup(&old,&current,&main,&clock);clock.context=&current;current.rate=2;clock.delay=250000;main.delay=50000;channel.rate=2;
  assert(spu_channel_UpdateDates(&channel,751678708555LL)==2);
@@ -82,18 +108,66 @@ int main(void) {
  assert(spu_render_entry_IsSelected(&entries[0],3,123,false));pics[0].i_channel=1;assert(!spu_render_entry_IsSelected(&entries[0],1,123,true));channel.entries.size=0;assert(spu_channel_UpdateDates(&channel,1)==0);
  puts("PASS exact clock/SPU:20frames,cue durations,future queue,2x rate,delay,invalid stop,OSD,empty channel");
 }
-'''
-def run(source,headers):
- clock=(source/'src/clock/clock.c').read_text();spu=(source/'src/video_output/vout_subpictures.c').read_text()
- parts=[function(clock,n) for n in ['context_stream_to_system','vlc_clock_monotonic_to_system','vlc_clock_slave_to_system','context_get_closest','vlc_clock_get_context','vlc_clock_ConvertToSystem']]
- for n in ['vlc_clock_GetConversionContext','vlc_clock_ConvertToSystemWithContext']:
-  if re.search(r'\b'+n+r'\([^;]+?\)\s*\{',clock):parts.append(function(clock,n))
- parts += [function(spu,'spu_channel_UpdateDates'),function(spu,'spu_render_entry_IsSelected')]
- start=spu.index('        vlc_clock_Lock(channel->clock);',spu.index('void spu_PutSubpicture('));end=spu.index('        vlc_clock_Unlock(channel->clock);',start)+len('        vlc_clock_Unlock(channel->clock);')
- queue='static void queue_dates(struct spu_channel *channel,subpicture_t *subpic,vlc_tick_t system_now) { vlc_tick_t orgstart=subpic->i_start,orgstop=subpic->i_stop;'+spu[start:end]+'}\n'
- with tempfile.TemporaryDirectory(prefix='subtitle-clock-regression-') as d:
-  p=Path(d);(p/'probe.c').write_text(PRE+'\n'.join(parts)+queue+CASES)
-  subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-fsanitize=address,undefined','-I',str(headers/'include'),str(p/'probe.c'),'-o',str(p/'probe')],check=True)
-  return subprocess.run([str(p/'probe')]).returncode
-if __name__=='__main__':
- parser=argparse.ArgumentParser();parser.add_argument('source',type=Path);parser.add_argument('--headers',type=Path);args=parser.parse_args();raise SystemExit(run(args.source,args.headers or args.source))
+"""
+
+
+def run(source, headers):
+    clock = (source / "src/clock/clock.c").read_text()
+    spu = (source / "src/video_output/vout_subpictures.c").read_text()
+    parts = [
+        function(clock, n)
+        for n in [
+            "context_stream_to_system",
+            "vlc_clock_monotonic_to_system",
+            "vlc_clock_slave_to_system",
+            "context_get_closest",
+            "vlc_clock_get_context",
+            "vlc_clock_ConvertToSystem",
+        ]
+    ]
+    for n in ["vlc_clock_GetConversionContext", "vlc_clock_ConvertToSystemWithContext"]:
+        if re.search(r"\b" + n + r"\([^;]+?\)\s*\{", clock):
+            parts.append(function(clock, n))
+    parts += [
+        function(spu, "spu_channel_UpdateDates"),
+        function(spu, "spu_render_entry_IsSelected"),
+    ]
+    start = spu.index(
+        "        vlc_clock_Lock(channel->clock);", spu.index("void spu_PutSubpicture(")
+    )
+    end = spu.index("        vlc_clock_Unlock(channel->clock);", start) + len(
+        "        vlc_clock_Unlock(channel->clock);"
+    )
+    queue = (
+        "static void queue_dates(struct spu_channel *channel,subpicture_t *subpic,vlc_tick_t system_now) { vlc_tick_t orgstart=subpic->i_start,orgstop=subpic->i_stop;"
+        + spu[start:end]
+        + "}\n"
+    )
+    with tempfile.TemporaryDirectory(prefix="subtitle-clock-regression-") as d:
+        p = Path(d)
+        (p / "probe.c").write_text(PRE + "\n".join(parts) + queue + CASES)
+        subprocess.run(
+            [
+                "cc",
+                "-std=gnu11",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-fsanitize=address,undefined",
+                "-I",
+                str(headers / "include"),
+                str(p / "probe.c"),
+                "-o",
+                str(p / "probe"),
+            ],
+            check=True,
+        )
+        return subprocess.run([str(p / "probe")]).returncode
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("source", type=Path)
+    parser.add_argument("--headers", type=Path)
+    args = parser.parse_args()
+    raise SystemExit(run(args.source, args.headers or args.source))

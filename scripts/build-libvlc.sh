@@ -12,7 +12,7 @@
 #   ./build-libvlc.sh              # Build for iOS device + simulator
 #   ./build-libvlc.sh --all        # Build for iOS, tvOS, visionOS, macOS, Catalyst
 #   ./build-libvlc.sh --ios-only   # iOS device + simulator only
-#   ./build-libvlc.sh --ios-device-only # iPhone/iPad diagnostic slice only
+#   ./build-libvlc.sh --ios-device-only # iPhone/iPad device slice only
 #   ./build-libvlc.sh --macos-only # macOS only (fastest for dev)
 #   ./build-libvlc.sh --catalyst   # Add Mac Catalyst (arm64 + x86_64)
 #   ./build-libvlc.sh --clean      # Remove build directory
@@ -779,7 +779,7 @@ Usage: $0 [OPTIONS]
 Platform selection:
   --all              Build for iOS, tvOS, visionOS, macOS, and Mac Catalyst
   --ios-only         iOS device + simulator only (default)
-  --ios-device-only  iPhone/iPad device only (diagnostic build, no simulator)
+  --ios-device-only  iPhone/iPad device only (no simulator)
   --macos-only       macOS only (fastest for development)
   --tvos-only        tvOS device + simulator only
   --visionos-only    visionOS device + simulator only
