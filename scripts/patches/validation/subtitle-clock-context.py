@@ -39,7 +39,6 @@ PRE = r"""
 #define VLC_TICK_FROM_SEC(s) ((int64_t)(s)*1000000)
 #define VOUT_SPU_CHANNEL_OSD_COUNT 2
 #define AssertLocked(c) ((void)(c))
-/* Numeric collector has its own sanitizer/privacy test. */
 #define __MAX(a,b) ((a)>(b)?(a):(b))
 #define vlc_error(logger,...) ((void)(logger))
 static inline void *vlc_reallocarray(void *p,size_t n,size_t s) { assert(!s||n<=SIZE_MAX/s);return realloc(p,n*s); }
@@ -53,15 +52,43 @@ typedef struct vlc_clock_context { double rate,coeff;vlc_tick_t offset;uint32_t 
 typedef struct vlc_clock_t vlc_clock_t;
 typedef struct vlc_clock_main_t { vlc_clock_t *master;ctx_t *context;struct vlc_list prev_contexts;vlc_tick_t delay,pause_date,output_dejitter,input_dejitter;bool paused;unsigned wait_sync_ref_priority;clock_point_t first_pcr;void *logger; } vlc_clock_main_t;
 struct vlc_clock_ops { vlc_tick_t (*to_system)(vlc_clock_t *,ctx_t *,vlc_tick_t,vlc_tick_t,double); };
-struct vlc_clock_t { const struct vlc_clock_ops *ops;vlc_clock_main_t *owner;ctx_t *context;vlc_tick_t last_conversion,delay;unsigned priority;bool follow_output_timeline; };
+struct vlc_clock_t { const struct vlc_clock_ops *ops;vlc_clock_main_t *owner;ctx_t *context;vlc_tick_t last_conversion,delay;unsigned priority;bool follow_output_timeline;const char *track_str_id; };
 static void vlc_clock_switch_context(vlc_clock_t *c,ctx_t *ctx) { (void)c;(void)ctx;abort(); } // All call sites under test use update=false.
 static void vlc_clock_Lock(vlc_clock_t *c) { (void)c; }
 static void vlc_clock_Unlock(vlc_clock_t *c) { (void)c; }
+#ifdef HAS_OUTPUT_MODE
+enum es_format_category_e { SPU_ES=3 };
+static vlc_clock_t created_slave;
+static bool fail_create_slave;
+static vlc_clock_t *vlc_clock_main_CreateSlave(vlc_clock_main_t *owner,
+ const char *id,enum es_format_category_e cat,const void *cbs,void *data) {
+ (void)cat;(void)cbs;(void)data;
+ if(fail_create_slave) return NULL;
+ created_slave=(vlc_clock_t){.owner=owner,.track_str_id=id};
+ return &created_slave;
+}
+#endif
 typedef struct { int64_t i_channel;vlc_tick_t i_start,i_stop; } subpicture_t;
 typedef struct { subpicture_t *subpic;vlc_tick_t orgstart,orgstop,start,stop; } spu_render_entry_t;
 struct spu_channel { vlc_clock_t *clock;double rate;struct VLC_VECTOR(spu_render_entry_t) entries; };
 """
 CASES = r"""
+static void clone_output_mode(void) {
+#ifdef HAS_OUTPUT_MODE
+ vlc_clock_main_t owner={0};
+ vlc_clock_t parent={.owner=&owner,.track_str_id="subtitle"};
+ vlc_clock_t *clone=vlc_clock_CreateSlave(&parent,SPU_ES);
+ assert(clone && !clone->follow_output_timeline);
+ vlc_clock_SetFollowOutputTimeline(&parent);
+ clone=vlc_clock_CreateSlave(&parent,SPU_ES);
+ assert(clone && clone->follow_output_timeline && parent.follow_output_timeline);
+ fail_create_slave=true;
+ assert(vlc_clock_CreateSlave(&parent,SPU_ES)==NULL);
+ fail_create_slave=false;
+ puts("PASS output mode:opt-in,clone inheritance,allocation failure");
+#endif
+}
+
 static void setup(ctx_t *old,ctx_t *current,vlc_clock_main_t *main,vlc_clock_t *clock) {
  *old=(ctx_t){.rate=1,.coeff=1,.offset=750275163950LL,.clock_id=0,.last={.system=1}};
  *current=*old;current->offset=750274415929LL;current->clock_id=1;
@@ -189,6 +216,7 @@ static bool pending_pcr_timelines(void) {
 }
 
 int main(void) {
+ clone_output_mode();
  if(!pending_pcr_timelines()) return 4;
  if(!continuous_dialogue_gap()) return 3;
  if(!mixed_timeline_queue()) return 1;
@@ -266,9 +294,13 @@ def run(source, headers):
         + spu[start:end]
         + "}\n"
     )
+    output_mode = "vlc_clock_SetFollowOutputTimeline" in clock
+    if output_mode:
+        assert "clock->follow_output_timeline = false;" in function(clock, "vlc_clock_main_Create")
+        parts += [function(clock, "vlc_clock_CreateSlave"), function(clock, "vlc_clock_SetFollowOutputTimeline")]
     with tempfile.TemporaryDirectory(prefix="subtitle-clock-regression-") as d:
         p = Path(d)
-        (p / "probe.c").write_text(PRE + "\n".join(parts) + queue + CASES)
+        (p / "probe.c").write_text(("#define HAS_OUTPUT_MODE 1\n" if output_mode else "") + PRE + "\n".join(parts) + queue + CASES)
         subprocess.run(
             [
                 "cc",
