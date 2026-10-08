@@ -1,10 +1,99 @@
 diff --git a/src/clock/clock.c b/src/clock/clock.c
 --- a/src/clock/clock.c
 +++ b/src/clock/clock.c
-@@ -1218,6 +1218,25 @@
-     return clock->last_conversion;
+@@ -26,6 +26,7 @@
+ #endif
+ 
+ #include <vlc_common.h>
++#include <stdatomic.h>
+ #include <vlc_aout.h>
+ #include <assert.h>
+ #include <limits.h>
+@@ -141,7 +142,47 @@
+     struct vlc_clock_context *context;
+ 
+     vlc_tick_t last_conversion;
++
++    /* Temporary opt-in numeric correlation; never changes playback state. */
++    bool timing_diagnostic_enabled;
++    uint32_t timing_diagnostic_id;
++    vlc_tick_t timing_diagnostic_next_sample[5];
+ };
++
++static atomic_uint timing_diagnostic_sequence = 1;
++
++static void vlc_clock_TimingTrace(vlc_clock_t *clock,
++                                  struct vlc_clock_context *ctx,
++                                  vlc_tick_t now, vlc_tick_t pts,
++                                  vlc_tick_t value, unsigned kind)
++{
++    vlc_clock_main_t *main_clock = clock->owner;
++    if (!clock->timing_diagnostic_enabled || main_clock->logger == NULL
++        || ctx == NULL || kind == 0 || kind >= 5
++        || now == VLC_TICK_INVALID || now == VLC_TICK_MAX
++        || now < clock->timing_diagnostic_next_sample[kind])
++        return;
++
++    clock->timing_diagnostic_next_sample[kind] = now + VLC_TICK_FROM_MS(200);
++    const struct vlc_clock_context *current = main_clock->context;
++    vlc_warning(main_clock->logger,
++        "TONYFLIX_CLOCK_V2 kind=%u clock=%u master=%u input=%u"
++        " now=%"PRId64" pts=%"PRId64" value=%"PRId64
++        " selected=%u attached=%u current=%u"
++        " offset=%"PRId64" main_offset=%"PRId64
++        " coeff_ppm=%.0f main_coeff_ppm=%.0f"
++        " last_conversion=%"PRId64" delay=%"PRId64
++        " main_delay=%"PRId64" paused=%u",
++        kind, clock->timing_diagnostic_id,
++        main_clock->master ? main_clock->master->timing_diagnostic_id : 0,
++        clock->track_str_id != NULL && !strcmp(clock->track_str_id, "input"),
++        now, pts, value, ctx->clock_id,
++        clock->context ? clock->context->clock_id : UINT32_MAX,
++        current->clock_id, ctx->offset, current->offset,
++        ctx->coeff * 1000000., current->coeff * 1000000.,
++        clock->last_conversion, clock->delay, main_clock->delay,
++        main_clock->paused);
++}
+ 
+ vlc_clock_listener_id *
+ vlc_clock_AddListener(vlc_clock_t *clock,
+@@ -1147,7 +1188,11 @@
+     else
+         ctx = clock->context;
+ 
+-    return clock->ops->update(clock, ctx, system_now, ts, rate, 0, 0);
++    vlc_tick_t result = clock->ops->update(clock, ctx, system_now, ts, rate, 0, 0);
++    vlc_clock_TimingTrace(clock, clock->context ? clock->context
++                                              : main_clock->context,
++                          system_now, ts, result, 1);
++    return result;
  }
  
+ vlc_tick_t vlc_clock_UpdateVideo(vlc_clock_t *clock, vlc_tick_t system_now,
+@@ -1163,8 +1208,12 @@
+     else
+         ctx = clock->context;
+ 
+-    return clock->ops->update(clock, ctx, system_now, ts, rate,
+-                              frame_rate, frame_rate_base);
++    vlc_tick_t result = clock->ops->update(clock, ctx, system_now, ts, rate,
++                                          frame_rate, frame_rate_base);
++    vlc_clock_TimingTrace(clock, clock->context ? clock->context
++                                              : main_clock->context,
++                          system_now, ts, result, 2);
++    return result;
+ }
+ 
+ vlc_tick_t vlc_clock_UpdateVideoFrameStep(
+@@ -1215,7 +1264,30 @@
+ 
+     clock->last_conversion =
+         clock->ops->to_system(clock, ctx, system_now, ts, rate);
++    vlc_clock_TimingTrace(clock, ctx, system_now, ts,
++                          clock->last_conversion, 4);
+     return clock->last_conversion;
++}
++
 +/* Borrowed under the main clock lock. Unlike scalar conversion, consulting
 + * upcoming subtitle dates must not change the playback conversion reference. */
 +struct vlc_clock_context *
@@ -21,12 +110,27 @@ diff --git a/src/clock/clock.c b/src/clock/clock.c
 +{
 +    AssertLocked(clock);
 +    assert(context != NULL);
-+    return clock->ops->to_system(clock, context, system_now, ts, rate);
-+}
-+
++    vlc_tick_t result = clock->ops->to_system(clock, context, system_now, ts, rate);
++    vlc_clock_TimingTrace(clock, context, system_now, ts, result, 3);
++    return result;
+ }
+ 
  static const struct vlc_clock_ops master_ops = {
-     .update = vlc_clock_master_update,
-     .reset = vlc_clock_master_reset,
+@@ -1269,6 +1341,14 @@
+     clock->priority = priority;
+     assert(!cbs || cbs->on_update);
+     clock->last_conversion = VLC_TICK_INVALID;
++    const char *timing_option = getenv("TONYFLIX_CLOCK_DIAGNOSTICS");
++    clock->timing_diagnostic_enabled =
++        timing_option != NULL && strcmp(timing_option, "1") == 0;
++    clock->timing_diagnostic_id =
++        atomic_fetch_add_explicit(&timing_diagnostic_sequence, 1,
++                                   memory_order_relaxed);
++    memset(clock->timing_diagnostic_next_sample, 0,
++           sizeof(clock->timing_diagnostic_next_sample));
+ 
+     if (input)
+     {
 diff --git a/src/clock/clock.h b/src/clock/clock.h
 --- a/src/clock/clock.h
 +++ b/src/clock/clock.h
