@@ -74,18 +74,18 @@ VideoLAN's Apple wrapper, [VLCKit](https://code.videolan.org/videolan/VLCKit), i
 ## Installation
 
 In Xcode, choose **File → Add Package Dependencies**, paste the repo
-URL, and Xcode will pick up the latest release automatically:
+URL, then select the exact fork version `1.1.0-beta.14-tonyflix.1`:
 
 ```
-https://github.com/harflabs/SwiftVLC.git
+https://github.com/tonyredondo/SwiftVLC.git
 ```
 
 From a `Package.swift` manifest, add a dependency and pin to the
 current release. The version string lives on the
-[releases page](https://github.com/harflabs/SwiftVLC/releases).
+[fork releases page](https://github.com/tonyredondo/SwiftVLC/releases).
 
 ```swift
-.package(url: "https://github.com/harflabs/SwiftVLC.git", from: "1.0.0")
+.package(url: "https://github.com/tonyredondo/SwiftVLC.git", exact: "1.1.0-beta.14-tonyflix.1")
 ```
 
 The pre-built libVLC xcframework downloads automatically via SPM. It's a large binary (multi-GB unstripped; the release zip is a few hundred MB).
@@ -231,7 +231,7 @@ fixtures, and structure.
 ## Development Setup
 
 ```bash
-git clone https://github.com/harflabs/SwiftVLC.git
+git clone https://github.com/tonyredondo/SwiftVLC.git
 cd SwiftVLC
 ./scripts/setup-dev.sh
 swift test
