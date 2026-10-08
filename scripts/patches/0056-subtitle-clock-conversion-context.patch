@@ -9,10 +9,13 @@ diff --git a/src/clock/clock.c b/src/clock/clock.c
  #include <vlc_aout.h>
  #include <assert.h>
  #include <limits.h>
-@@ -141,7 +142,47 @@
+@@ -141,7 +142,50 @@
      struct vlc_clock_context *context;
  
      vlc_tick_t last_conversion;
++
++    /* Independent subtitle sources use the media output timeline. */
++    bool follow_output_timeline;
 +
 +    /* Temporary opt-in numeric correlation; never changes playback state. */
 +    bool timing_diagnostic_enabled;
@@ -57,7 +60,27 @@ diff --git a/src/clock/clock.c b/src/clock/clock.c
  
  vlc_clock_listener_id *
  vlc_clock_AddListener(vlc_clock_t *clock,
-@@ -1147,7 +1188,11 @@
+@@ -354,6 +398,19 @@
+                       bool update)
+ {
+     vlc_clock_main_t *main_clock = clock->owner;
++
++    /* Independent subtitle timestamps have already been normalized to the
++     * main media time by EsOutSend. Follow the actual output, not a newer PCR
++     * fallback selected merely because the next dialogue has a timestamp gap.
++     * Embedded tracks keep the per-timestamp timeline search below. */
++    if (clock->follow_output_timeline && main_clock->master != NULL
++        && main_clock->master->context != NULL)
++    {
++        struct vlc_clock_context *ctx = main_clock->master->context;
++        if (clock->context != ctx && update)
++            vlc_clock_switch_context(clock, ctx);
++        return ctx;
++    }
+ 
+     /* The input clock is always using the last context */
+     if (clock->context == NULL)
+@@ -1147,7 +1204,11 @@
      else
          ctx = clock->context;
  
@@ -70,7 +93,7 @@ diff --git a/src/clock/clock.c b/src/clock/clock.c
  }
  
  vlc_tick_t vlc_clock_UpdateVideo(vlc_clock_t *clock, vlc_tick_t system_now,
-@@ -1163,8 +1208,12 @@
+@@ -1163,8 +1224,12 @@
      else
          ctx = clock->context;
  
@@ -85,7 +108,7 @@ diff --git a/src/clock/clock.c b/src/clock/clock.c
  }
  
  vlc_tick_t vlc_clock_UpdateVideoFrameStep(
-@@ -1215,7 +1264,30 @@
+@@ -1215,7 +1280,30 @@
  
      clock->last_conversion =
          clock->ops->to_system(clock, ctx, system_now, ts, rate);
@@ -116,10 +139,11 @@ diff --git a/src/clock/clock.c b/src/clock/clock.c
  }
  
  static const struct vlc_clock_ops master_ops = {
-@@ -1269,6 +1341,14 @@
+@@ -1269,6 +1357,15 @@
      clock->priority = priority;
      assert(!cbs || cbs->on_update);
      clock->last_conversion = VLC_TICK_INVALID;
++    clock->follow_output_timeline = false;
 +    const char *timing_option = getenv("TONYFLIX_CLOCK_DIAGNOSTICS");
 +    clock->timing_diagnostic_enabled =
 +        timing_option != NULL && strcmp(timing_option, "1") == 0;
@@ -131,13 +155,41 @@ diff --git a/src/clock/clock.c b/src/clock/clock.c
  
      if (input)
      {
+@@ -1396,7 +1493,18 @@
+ vlc_clock_t *vlc_clock_CreateSlave(const vlc_clock_t *clock,
+                                    enum es_format_category_e cat)
+ {
+-    return vlc_clock_main_CreateSlave(clock->owner, clock->track_str_id, cat, NULL, NULL);
++    vlc_clock_t *slave = vlc_clock_main_CreateSlave(clock->owner,
++                                                    clock->track_str_id, cat,
++                                                    NULL, NULL);
++    if (slave != NULL)
++        slave->follow_output_timeline = clock->follow_output_timeline;
++    return slave;
++}
++
++void vlc_clock_SetFollowOutputTimeline(vlc_clock_t *clock)
++{
++    AssertLocked(clock);
++    clock->follow_output_timeline = true;
+ }
+ 
+ void vlc_clock_Delete(vlc_clock_t *clock)
 diff --git a/src/clock/clock.h b/src/clock/clock.h
 --- a/src/clock/clock.h
 +++ b/src/clock/clock.h
-@@ -357,6 +357,23 @@
+@@ -356,6 +356,30 @@
+                                      vlc_tick_t system_now, vlc_tick_t ts,
                                       double rate, uint32_t *clock_id);
  
- /**
++/** Mark an independent subtitle source whose PTS were aligned to the media.
++ * The main clock lock must be held. Cloned rendering clocks inherit this mode.
++ * Conversion follows changes of the live output context, including seeks.
++ * Embedded subtitle clocks retain their normal per-timestamp selection.
++ */
++void vlc_clock_SetFollowOutputTimeline(vlc_clock_t *clock);
++
++/**
 + * Borrow the timeline used to convert related subtitle timestamps.
 + *
 + * The main clock lock must remain held until the last conversion. The context
@@ -154,10 +206,9 @@ diff --git a/src/clock/clock.h b/src/clock/clock.h
 +    vlc_clock_t *clock, struct vlc_clock_context *context,
 +    vlc_tick_t system_now, vlc_tick_t ts, double rate);
 +
-+/**
+ /**
   * Starts a new clock based on the given clock point, accounting for
   * previous updates.
-  *
 diff --git a/src/video_output/vout_subpictures.c b/src/video_output/vout_subpictures.c
 --- a/src/video_output/vout_subpictures.c
 +++ b/src/video_output/vout_subpictures.c
@@ -238,3 +289,16 @@ diff --git a/src/video_output/vout_subpictures.c b/src/video_output/vout_subpict
  
          vlc_clock_Unlock(channel->clock);
  
+diff --git a/src/input/es_out.c b/src/input/es_out.c
+--- a/src/input/es_out.c
++++ b/src/input/es_out.c
+@@ -2661,6 +2661,9 @@
+                                                    p_es->fmt.i_cat,
+                                                    &clock_cbs, p_es);
+     }
++    if (p_es->p_clock != NULL && p_es->fmt.i_cat == SPU_ES
++        && p_es->id.source != p_sys->main_source)
++        vlc_clock_SetFollowOutputTimeline(p_es->p_clock);
+     vlc_clock_main_Unlock(p_es->p_pgrm->clocks.main);
+ 
+     if( !p_es->p_clock )
