@@ -57,17 +57,17 @@ diff --git a/src/clock/clock.h b/src/clock/clock.h
 diff --git a/src/video_output/vout_subpictures.c b/src/video_output/vout_subpictures.c
 --- a/src/video_output/vout_subpictures.c
 +++ b/src/video_output/vout_subpictures.c
-@@ -1197,8 +1197,7 @@
+@@ -1154,8 +1154,7 @@
  static size_t spu_channel_UpdateDates(struct spu_channel *channel,
                                         vlc_tick_t system_now)
  {
 -    /* Put every spu start and stop ts into the same array to convert them in
 -     * one shot */
-+    /* Convert the queued channel on one coherent clock timeline. */
++    /* Convert each queued cue on its clock timeline without advancing lookahead. */
      if (channel->entries.size == 0)
          return 0;
  
-@@ -1207,24 +1206,25 @@
+@@ -1164,24 +1163,27 @@
  
      vlc_clock_Lock(channel->clock);
      spu_render_entry_t *entry;
@@ -93,15 +93,17 @@ diff --git a/src/video_output/vout_subpictures.c b/src/video_output/vout_subpict
 +        if (entry->orgstart < reference_ts)
 +            reference_ts = entry->orgstart;
 +
-+    /* Borrow one timeline for the channel while its clock remains locked.
-+     * Only the earliest cue advances the conversion reference. Ends and future
-+     * cues are lookahead, and must not make an active cue "too early" again. */
-+    struct vlc_clock_context *context =
-+        vlc_clock_GetConversionContext(channel->clock, system_now, reference_ts);
++    /* Only the earliest cue advances the conversion reference. Ends and future
++     * cues are lookahead, and must not make an active cue "too early" again.
++     * A channel can span PCR discontinuities: choose a context for each cue,
++     * then convert its start and stop together while the clock remains locked. */
 +    (void) vlc_clock_ConvertToSystem(channel->clock, system_now, reference_ts,
 +                                      channel->rate, NULL);
 +    vlc_vector_foreach_ref(entry, &channel->entries)
 +    {
++        struct vlc_clock_context *context =
++            vlc_clock_GetConversionContext(channel->clock, system_now,
++                                            entry->orgstart);
 +        entry->start = vlc_clock_ConvertToSystemWithContext(channel->clock,
 +                          context, system_now, entry->orgstart, channel->rate);
 +        entry->stop = entry->orgstop == VLC_TICK_INVALID ? VLC_TICK_INVALID
@@ -110,7 +112,7 @@ diff --git a/src/video_output/vout_subpictures.c b/src/video_output/vout_subpict
      }
      vlc_clock_Unlock(channel->clock);
  
-@@ -2645,15 +2645,13 @@
+@@ -2593,15 +2595,13 @@
          vlc_tick_t system_now = vlc_tick_now();
  
          vlc_clock_Lock(channel->clock);
