@@ -40,7 +40,6 @@ PRE = r"""
 #define VOUT_SPU_CHANNEL_OSD_COUNT 2
 #define AssertLocked(c) ((void)(c))
 /* Numeric collector has its own sanitizer/privacy test. */
-#define vlc_clock_TimingTrace(...) ((void)0)
 #define __MAX(a,b) ((a)>(b)?(a):(b))
 #define vlc_error(logger,...) ((void)(logger))
 static inline void *vlc_reallocarray(void *p,size_t n,size_t s) { assert(!s||n<=SIZE_MAX/s);return realloc(p,n*s); }
