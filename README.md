@@ -1,6 +1,11 @@
 > **Tonyflix fork:** this repository is maintained at `tonyredondo/SwiftVLC`.
 > It retains the `v1.1.0-beta.14` Swift surface and the pinned VLC engine,
 > adding coherent subtitle timestamp conversion in native patch `0056`.
+> Normalized independent subtitle sources follow the actual output master
+> timeline; embedded streams retain their per-timestamp timeline selection.
+> Each cue uses one locked conversion context for both start and end without
+> advancing the output cursor while looking ahead. The original subtitle text
+> and timing are preserved.
 > Release assets and tooling target this personal fork. Tonyflix pins an exact
 > fork release; it does not download a moving `main` branch or an upstream
 > binary. Fork versions use a `-tonyflix.N` prerelease suffix.
@@ -74,7 +79,7 @@ VideoLAN's Apple wrapper, [VLCKit](https://code.videolan.org/videolan/VLCKit), i
 ## Installation
 
 In Xcode, choose **File → Add Package Dependencies**, paste the repo
-URL, then select the exact fork version `1.1.0-beta.14-tonyflix.1`:
+URL, then select the exact fork version `1.1.0-beta.14-tonyflix.2`:
 
 ```
 https://github.com/tonyredondo/SwiftVLC.git
@@ -85,7 +90,7 @@ current release. The version string lives on the
 [fork releases page](https://github.com/tonyredondo/SwiftVLC/releases).
 
 ```swift
-.package(url: "https://github.com/tonyredondo/SwiftVLC.git", exact: "1.1.0-beta.14-tonyflix.1")
+.package(url: "https://github.com/tonyredondo/SwiftVLC.git", exact: "1.1.0-beta.14-tonyflix.2")
 ```
 
 The pre-built libVLC xcframework downloads automatically via SPM. It's a large binary (multi-GB unstripped; the release zip is a few hundred MB).
