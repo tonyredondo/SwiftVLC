@@ -1,7 +1,38 @@
 diff --git a/src/clock/clock.c b/src/clock/clock.c
 --- a/src/clock/clock.c
 +++ b/src/clock/clock.c
-@@ -1218,6 +1218,25 @@
+@@ -141,6 +141,10 @@
+     struct vlc_clock_context *context;
+ 
+     vlc_tick_t last_conversion;
++
++    /* Independent subtitle sources use the media output timeline. */
++    bool follow_output_timeline;
++
+ };
+ 
+ vlc_clock_listener_id *
+@@ -354,6 +358,19 @@
+                       bool update)
+ {
+     vlc_clock_main_t *main_clock = clock->owner;
++
++    /* Independent subtitle timestamps have already been normalized to the
++     * main media time by EsOutSend. Follow the actual output, not a newer PCR
++     * fallback selected merely because the next dialogue has a timestamp gap.
++     * Embedded tracks keep the per-timestamp timeline search below. */
++    if (clock->follow_output_timeline && main_clock->master != NULL
++        && main_clock->master->context != NULL)
++    {
++        struct vlc_clock_context *ctx = main_clock->master->context;
++        if (clock->context != ctx && update)
++            vlc_clock_switch_context(clock, ctx);
++        return ctx;
++    }
+ 
+     /* The input clock is always using the last context */
+     if (clock->context == NULL)
+@@ -1218,6 +1235,25 @@
      return clock->last_conversion;
  }
  
@@ -27,13 +58,50 @@ diff --git a/src/clock/clock.c b/src/clock/clock.c
  static const struct vlc_clock_ops master_ops = {
      .update = vlc_clock_master_update,
      .reset = vlc_clock_master_reset,
+@@ -1269,6 +1305,8 @@
+     clock->priority = priority;
+     assert(!cbs || cbs->on_update);
+     clock->last_conversion = VLC_TICK_INVALID;
++    clock->follow_output_timeline = false;
++
+ 
+     if (input)
+     {
+@@ -1396,7 +1434,18 @@
+ vlc_clock_t *vlc_clock_CreateSlave(const vlc_clock_t *clock,
+                                    enum es_format_category_e cat)
+ {
+-    return vlc_clock_main_CreateSlave(clock->owner, clock->track_str_id, cat, NULL, NULL);
++    vlc_clock_t *slave = vlc_clock_main_CreateSlave(clock->owner,
++                                                    clock->track_str_id, cat,
++                                                    NULL, NULL);
++    if (slave != NULL)
++        slave->follow_output_timeline = clock->follow_output_timeline;
++    return slave;
++}
++
++void vlc_clock_SetFollowOutputTimeline(vlc_clock_t *clock)
++{
++    AssertLocked(clock);
++    clock->follow_output_timeline = true;
+ }
+ 
+ void vlc_clock_Delete(vlc_clock_t *clock)
 diff --git a/src/clock/clock.h b/src/clock/clock.h
 --- a/src/clock/clock.h
 +++ b/src/clock/clock.h
-@@ -357,6 +357,23 @@
+@@ -356,6 +356,30 @@
+                                      vlc_tick_t system_now, vlc_tick_t ts,
                                       double rate, uint32_t *clock_id);
  
- /**
++/** Mark an independent subtitle source whose PTS were aligned to the media.
++ * The main clock lock must be held. Cloned rendering clocks inherit this mode.
++ * Conversion follows changes of the live output context, including seeks.
++ * Embedded subtitle clocks retain their normal per-timestamp selection.
++ */
++void vlc_clock_SetFollowOutputTimeline(vlc_clock_t *clock);
++
++/**
 + * Borrow the timeline used to convert related subtitle timestamps.
 + *
 + * The main clock lock must remain held until the last conversion. The context
@@ -50,24 +118,23 @@ diff --git a/src/clock/clock.h b/src/clock/clock.h
 +    vlc_clock_t *clock, struct vlc_clock_context *context,
 +    vlc_tick_t system_now, vlc_tick_t ts, double rate);
 +
-+/**
+ /**
   * Starts a new clock based on the given clock point, accounting for
   * previous updates.
-  *
 diff --git a/src/video_output/vout_subpictures.c b/src/video_output/vout_subpictures.c
 --- a/src/video_output/vout_subpictures.c
 +++ b/src/video_output/vout_subpictures.c
-@@ -1197,8 +1197,7 @@
+@@ -1154,8 +1154,7 @@
  static size_t spu_channel_UpdateDates(struct spu_channel *channel,
                                         vlc_tick_t system_now)
  {
 -    /* Put every spu start and stop ts into the same array to convert them in
 -     * one shot */
-+    /* Convert the queued channel on one coherent clock timeline. */
++    /* Convert each queued cue on its clock timeline without advancing lookahead. */
      if (channel->entries.size == 0)
          return 0;
  
-@@ -1207,24 +1206,25 @@
+@@ -1164,24 +1163,27 @@
  
      vlc_clock_Lock(channel->clock);
      spu_render_entry_t *entry;
@@ -93,15 +160,17 @@ diff --git a/src/video_output/vout_subpictures.c b/src/video_output/vout_subpict
 +        if (entry->orgstart < reference_ts)
 +            reference_ts = entry->orgstart;
 +
-+    /* Borrow one timeline for the channel while its clock remains locked.
-+     * Only the earliest cue advances the conversion reference. Ends and future
-+     * cues are lookahead, and must not make an active cue "too early" again. */
-+    struct vlc_clock_context *context =
-+        vlc_clock_GetConversionContext(channel->clock, system_now, reference_ts);
++    /* Only the earliest cue advances the conversion reference. Ends and future
++     * cues are lookahead, and must not make an active cue "too early" again.
++     * A channel can span PCR discontinuities: choose a context for each cue,
++     * then convert its start and stop together while the clock remains locked. */
 +    (void) vlc_clock_ConvertToSystem(channel->clock, system_now, reference_ts,
 +                                      channel->rate, NULL);
 +    vlc_vector_foreach_ref(entry, &channel->entries)
 +    {
++        struct vlc_clock_context *context =
++            vlc_clock_GetConversionContext(channel->clock, system_now,
++                                            entry->orgstart);
 +        entry->start = vlc_clock_ConvertToSystemWithContext(channel->clock,
 +                          context, system_now, entry->orgstart, channel->rate);
 +        entry->stop = entry->orgstop == VLC_TICK_INVALID ? VLC_TICK_INVALID
@@ -110,7 +179,7 @@ diff --git a/src/video_output/vout_subpictures.c b/src/video_output/vout_subpict
      }
      vlc_clock_Unlock(channel->clock);
  
-@@ -2645,15 +2645,13 @@
+@@ -2593,15 +2595,13 @@
          vlc_tick_t system_now = vlc_tick_now();
  
          vlc_clock_Lock(channel->clock);
@@ -132,3 +201,16 @@ diff --git a/src/video_output/vout_subpictures.c b/src/video_output/vout_subpict
  
          vlc_clock_Unlock(channel->clock);
  
+diff --git a/src/input/es_out.c b/src/input/es_out.c
+--- a/src/input/es_out.c
++++ b/src/input/es_out.c
+@@ -2661,6 +2661,9 @@
+                                                    p_es->fmt.i_cat,
+                                                    &clock_cbs, p_es);
+     }
++    if (p_es->p_clock != NULL && p_es->fmt.i_cat == SPU_ES
++        && p_es->id.source != p_sys->main_source)
++        vlc_clock_SetFollowOutputTimeline(p_es->p_clock);
+     vlc_clock_main_Unlock(p_es->p_pgrm->clocks.main);
+ 
+     if( !p_es->p_clock )
