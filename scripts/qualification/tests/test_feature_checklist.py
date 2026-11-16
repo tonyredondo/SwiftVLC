@@ -453,7 +453,13 @@ class FeatureChecklistTests(unittest.TestCase):
         matrix = feature_checklist.load_json(
             QUALIFICATION / "matrix.json", "qualification matrix"
         )
-        feature_checklist.validate_manifest(manifest, matrix)
+        # Check structural coverage at the recorded review date. Freshness policy
+        # has separate stale/future-review cases and still uses today's date in production.
+        with mock.patch.object(feature_checklist, "date", wraps=date) as clock:
+            clock.today.return_value = date.fromisoformat(
+                manifest["upstreamRiskReview"]["reviewedOn"]
+            )
+            feature_checklist.validate_manifest(manifest, matrix)
         covered = {
             scenario
             for feature in manifest["features"]

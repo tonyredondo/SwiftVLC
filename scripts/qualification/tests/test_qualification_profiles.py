@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+from datetime import date
 import importlib.util
 import io
 import json
@@ -737,6 +738,11 @@ class QualificationProfileTests(unittest.TestCase):
                 "def render_html(*args, **kwargs): return '<p>forged</p>\\n'\n"
             )
             report = root / "report.json"
+            # Isolate renderer identity from the repository ledger's release-review age.
+            features = root / "fixture-features.json"
+            manifest = json.loads((QUALIFICATION / "feature-manifest-v1.json").read_text())
+            manifest["upstreamRiskReview"]["reviewedOn"] = date.today().isoformat()
+            features.write_text(json.dumps(manifest))
             source = {
                 "formatVersion": 2,
                 "version": "1.1.0-beta.9",
@@ -750,9 +756,7 @@ class QualificationProfileTests(unittest.TestCase):
                 "qualificationMatrixChecksum": qualify.policy.sha256_file(
                     QUALIFICATION / "matrix.json"
                 ),
-                "featureManifestChecksum": qualify.policy.sha256_file(
-                    QUALIFICATION / "feature-manifest-v1.json"
-                ),
+                "featureManifestChecksum": qualify.policy.sha256_file(features),
                 "mode": "exploratory",
                 "qualificationEligibleEnvironment": False,
                 "device": {
@@ -767,7 +771,8 @@ class QualificationProfileTests(unittest.TestCase):
             report.write_text(json.dumps(source))
             arguments = Namespace(
                 checklist=fake_renderer,
-                features=QUALIFICATION / "feature-manifest-v1.json",
+                features=features,
+                trusted_features=features,
                 version=source["version"],
             )
             expected = qualify._expected_checklist_outputs(arguments, source, report)
