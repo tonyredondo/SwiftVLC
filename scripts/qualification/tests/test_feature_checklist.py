@@ -453,7 +453,18 @@ class FeatureChecklistTests(unittest.TestCase):
         matrix = feature_checklist.load_json(
             QUALIFICATION / "matrix.json", "qualification matrix"
         )
-        feature_checklist.validate_manifest(manifest, matrix)
+        # Exercise the real manifest's structure and freshness with a controlled date.
+        reviewed_on = date.fromisoformat(manifest["upstreamRiskReview"]["reviewedOn"])
+        with mock.patch.object(feature_checklist, "date", wraps=date) as clock:
+            clock.today.return_value = reviewed_on
+            feature_checklist.validate_manifest(manifest, matrix)
+            clock.today.return_value = reviewed_on + timedelta(
+                days=manifest["upstreamRiskReview"]["maximumAgeDays"] + 1
+            )
+            with self.assertRaisesRegex(
+                feature_checklist.ChecklistError, "upstream risk review is stale"
+            ):
+                feature_checklist.validate_manifest(manifest, matrix)
         covered = {
             scenario
             for feature in manifest["features"]

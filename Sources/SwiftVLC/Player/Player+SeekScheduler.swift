@@ -1,6 +1,10 @@
 import CLibVLC
 
 extension Player {
+  /// Remote media may need several seconds to decode a frame at the requested position.
+  /// The public request and its native owner must use the same settlement budget.
+  private static let seekSettlementTimeout: Duration = .seconds(10)
+
   func submitNativeSeek(
     operation: NativeSeekOperation,
     evidence: SeekSettlementEvidence,
@@ -145,7 +149,7 @@ extension Player {
     let playbackGeneration = command.playbackGeneration
     let deadlineTask = Task { @MainActor [weak self] in
       do {
-        try await Task.sleep(for: .seconds(2))
+        try await Task.sleep(for: Self.seekSettlementTimeout)
       } catch {
         return
       }
@@ -220,7 +224,7 @@ extension Player {
     pendingSeekSettlement?.deadlinePhase = phase
     let timeoutTask = Task { @MainActor [weak self, weak resolver] in
       do {
-        try await Task.sleep(for: .seconds(2))
+        try await Task.sleep(for: Self.seekSettlementTimeout)
       } catch {
         return
       }
